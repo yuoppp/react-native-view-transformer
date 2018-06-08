@@ -77,6 +77,7 @@ export function transformedRect(rect:Rect, transform:Transform) {
 
   let pivot = transform.pivot;
   if (pivot === undefined || pivot === null) {
+
     let width = rect.width() * scale;
     let height = rect.height() * scale;
     let centerX = rect.centerX() + translateX * scale;
@@ -89,6 +90,7 @@ export function transformedRect(rect:Rect, transform:Transform) {
       centerY + height / 2
     );
   } else {
+
     let pivotX = pivot.x;
     let pivotY = pivot.y;
     if (!isValidNumber(pivotX) || !isValidNumber(pivotY)) {
@@ -101,8 +103,8 @@ export function transformedRect(rect:Rect, transform:Transform) {
     });
 
     //the pivot moved during scaling, now move it back
-    let dx = (scale - 1) * (pivotX - resultRect.centerX());
-    let dy = (scale - 1) * (pivotY - resultRect.centerY());
+    let dx = (scale - 1) * (pivotX - rect.centerX());
+    let dy = (scale - 1) * (pivotY - rect.centerY());
     return resultRect.offset(-dx, -dy);
   }
 }
@@ -154,10 +156,78 @@ export function alignedRect(rect:Rect, viewPortRect:Rect) {
 }
 
 export function availableTranslateSpace(rect, viewPortRect) {
+
   return {
-    left: viewPortRect.left - rect.left,
-    right: rect.right - viewPortRect.right,
-    top: viewPortRect.top - rect.top,
-    bottom: rect.bottom - viewPortRect.bottom
+    left: rect.left - viewPortRect.left,
+    right: viewPortRect.right - rect.right,
+    top: rect.top - viewPortRect.top,
+    bottom: viewPortRect.bottom - rect.bottom
   };
+}
+
+export function availableFlingSpace(rect, viewPortRect) {
+
+	return {
+		left: rect.left - viewPortRect.left,
+		right: rect.right - viewPortRect.right,
+		top: rect.top - viewPortRect.top,
+		bottom: rect.bottom - viewPortRect.bottom
+	};
+}
+
+/**
+ * checks if rect leaves the boundaries of viewPortRect
+ * @param rect
+ * @param viewPortRect
+ * @param scale
+ */
+export function leavesBoundaries(rect: Rect, viewPortRect: Rect) {
+
+	let br = viewPortRect.right;
+	let bl = viewPortRect.left;
+	let bb = viewPortRect.bottom;
+	let bt = viewPortRect.top;
+
+	return (
+		rect.right >= br ||
+		rect.left <= bl ||
+		rect.top <= bt ||
+		rect.bottom >= bb
+	);
+}
+
+/**
+ * returns rect, which fits the viewPortRect
+ * @param contentRect
+ * @param viewPortRect
+ * @param visibleViewPortRect
+ * @param scale
+ */
+export function bounceBackRect(contentRect: Rect, viewPortRect: Rect, visibleViewPortRect: Rect) {
+
+	let br = viewPortRect.right;
+	let bl = viewPortRect.left;
+	let bb = viewPortRect.bottom;
+	let bt = viewPortRect.top;
+
+	let dx = 0;
+	let dy = 0;
+
+	if (visibleViewPortRect.right >= br) {
+
+		dx = visibleViewPortRect.right - br;
+	} else if (visibleViewPortRect.left <= bl) {
+
+		dx = visibleViewPortRect.left - bl;
+	}
+
+	if (visibleViewPortRect.top <= bt) {
+
+		dy = visibleViewPortRect.top - bt;
+	} else if (visibleViewPortRect.bottom >= bb) {
+
+		dy = visibleViewPortRect.bottom - bb;
+	}
+
+	return contentRect.copy().offset(dx, dy);
 }
