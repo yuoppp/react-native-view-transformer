@@ -21,7 +21,10 @@ import {
 	availableTranslateSpace,
 	fitCenterRect,
 	alignedRect,
-	getTransform
+	getTransform,
+	bounceBackRect,
+	leavesBoundaries,
+	availableFlingSpace
 } from './TransformUtils';
 
 export default class ViewTransformer extends React.Component {
@@ -54,6 +57,7 @@ export default class ViewTransformer extends React.Component {
 		this.animate = this.animate.bind(this);
 
 		this.scroller = new Scroller(false, (dx, dy, scroller) => {
+
 			if (dx === 0 && dy === 0 && scroller.isFinished()) {
 				this.animateBounce();
 				return;
@@ -85,6 +89,30 @@ export default class ViewTransformer extends React.Component {
 			rect = fitCenterRect(this.props.contentAspectRatio, rect);
 		}
 		return rect;
+	}
+
+	scaledContentRect() {
+
+		let rect = this.viewPortRect();
+
+		let l = rect.left * this.state.scale;
+		let r = rect.right * this.state.scale;
+		let t = rect.top * this.state.scale;
+		let b = rect.bottom * this.state.scale;
+
+		return new Rect(l, t, r, b);
+	}
+
+	visibleViewPortRect() {
+
+		let rect = this.transformedContentRect();
+
+		let left = -rect.left;
+		let top = -rect.top;
+		let right = left + this.props.viewPortWidth;
+		let bottom = top + this.props.viewPortHeight;
+
+		return new Rect(left, top, right, bottom);
 	}
 
 	currentTransform() {
@@ -183,6 +211,9 @@ export default class ViewTransformer extends React.Component {
 			responderGranted: true
 		});
 		this.measureLayout();
+
+		// force fling animation finish
+		this.scroller.forceFinished(true);
 	}
 
 	onResponderMove(evt, gestureState) {
@@ -190,14 +221,7 @@ export default class ViewTransformer extends React.Component {
 
 		let dx = gestureState.moveX - gestureState.previousMoveX;
 		let dy = gestureState.moveY - gestureState.previousMoveY;
-		if (this.props.enableResistance &&
-			(
-				this.state.translateX >= this.props.bounds.left  ||
-				this.state.translateX <= this.props.bounds.right  ||
-				this.state.translateY >= this.props.bounds.top  ||
-				this.state.translateY <= this.props.bounds.bottom
-			)
-		) {
+		if (this.props.enableResistance && leavesBoundaries(this.visibleViewPortRect(), this.scaledContentRect())) {
 
 			let d = this.applyResistance(dx, dy);
 			dx = d.dx;
@@ -217,10 +241,15 @@ export default class ViewTransformer extends React.Component {
 
 			let newScale = this.state.scale * scaleBy;
 
-			if (!this.props.allowOverscale &&
-				(newScale <= this.props.minScale || newScale >= this.props.maxScale)
-			) {
-				scaleBy = 1;
+			if (!this.props.allowOverscale) {
+
+				if (newScale <= this.props.minScale) {
+
+					scaleBy = this.props.minScale / this.state.scale;
+				} else if (newScale >= this.props.maxScale) {
+
+					scaleBy = this.props.maxScale / this.state.scale;
+				}
 			}
 
 			let rect = transformedRect(transformedRect(this.contentRect(), this.currentTransform()), new Transform(
@@ -244,6 +273,7 @@ export default class ViewTransformer extends React.Component {
 	}
 
 	onResponderRelease(evt, gestureState) {
+
 		let handled = this.props.onTransformGestureReleased && this.props.onTransformGestureReleased({
 			scale: this.state.scale,
 			translateX: this.state.translateX,
@@ -255,25 +285,34 @@ export default class ViewTransformer extends React.Component {
 		}
 
 		if (gestureState.doubleTapUp) {
+
 			if (!this.props.enableScale) {
+
 				this.animateBounce();
 				return;
 			}
+
 			let pivotX = 0,
 				pivotY = 0;
+
 			if (gestureState.dx || gestureState.dy) {
+
 				pivotX = gestureState.moveX - this.state.pageX;
 				pivotY = gestureState.moveY - this.state.pageY;
 			} else {
+
 				pivotX = gestureState.x0 - this.state.pageX;
 				pivotY = gestureState.y0 - this.state.pageY;
 			}
 
 			this.performDoubleTapUp(pivotX, pivotY);
 		} else {
+
 			if (this.props.enableTranslate) {
+
 				this.performFling(gestureState.vx, gestureState.vy);
 			} else {
+
 				this.animateBounce();
 			}
 		}
@@ -284,7 +323,7 @@ export default class ViewTransformer extends React.Component {
 		let startX = 0;
 		let startY = 0;
 		let maxX, minX, maxY, minY;
-		let availablePanDistance = availableTranslateSpace(this.transformedContentRect(), this.viewPortRect());
+		let availablePanDistance = availableFlingSpace(this.visibleViewPortRect(), this.scaledContentRect());
 
 		if (vx > 0) {
 			minX = 0;
@@ -324,12 +363,16 @@ export default class ViewTransformer extends React.Component {
 	}
 
 	performDoubleTapUp(pivotX, pivotY) {
-		console.log('performDoubleTapUp...pivot=' + pivotX + ', ' + pivotY);
+
+		// console.log('performDoubleTapUp...pivot=' + pivotX + ', ' + pivotY);
+
 		let curScale = this.state.scale;
 		let scaleBy;
 		if (curScale > (1 + this.props.maxScale) / 2) {
+
 			scaleBy = 1 / curScale;
 		} else {
+
 			scaleBy = this.props.maxScale / curScale;
 		}
 
@@ -339,14 +382,21 @@ export default class ViewTransformer extends React.Component {
 				y: pivotY
 			}
 		));
-		rect = transformedRect(rect, new Transform(1, this.viewPortRect().centerX() - pivotX, this.viewPortRect().centerY() - pivotY));
-		rect = alignedRect(rect, this.viewPortRect());
+
+		// rect = transformedRect(rect, new Transform(1, this.viewPortRect().centerX() - pivotX, this.viewPortRect().centerY() - pivotY));
+		// rect = alignedRect(rect, this.viewPortRect());
+
+		let viewPort = this.scaledContentRect();
+		let visibleViewPortRect = this.visibleViewPortRect();
+
+		rect = bounceBackRect(rect, viewPort, visibleViewPortRect);
 
 		this.animate(rect);
 	}
 
 	applyResistance(dx, dy) {
-		let availablePanDistance = availableTranslateSpace(this.transformedContentRect(), this.viewPortRect());
+
+		let availablePanDistance = availableTranslateSpace(this.visibleViewPortRect(), this.scaledContentRect());
 
 		if ((dx > 0 && availablePanDistance.left < 0) ||
 			(dx < 0 && availablePanDistance.right < 0)) {
@@ -363,6 +413,7 @@ export default class ViewTransformer extends React.Component {
 	}
 
 	cancelAnimation() {
+
 		this.state.animator.stopAnimation();
 	}
 
@@ -374,7 +425,7 @@ export default class ViewTransformer extends React.Component {
 
 		let fromRect = this.transformedContentRect();
 		if (fromRect.equals(targetRect)) {
-			console.log('animate...equal rect, skip animation');
+			// console.log('animate...equal rect, skip animation');
 			return;
 		}
 
@@ -406,7 +457,6 @@ export default class ViewTransformer extends React.Component {
 			scaleBy = 1,
 			translateX = 0,
 			translateY = 0;
-		//хотел сделать баунс с транслейтами
 
 		if (curScale > maxScale) {
 			scaleBy = maxScale / curScale;
@@ -414,53 +464,22 @@ export default class ViewTransformer extends React.Component {
 			scaleBy = minScale / curScale;
 		}
 
-		// let rect = transformedRect(this.transformedContentRect(), new Transform(
-		// 	scaleBy,
-		// 	0,
-		// 	0, {
-		// 		x: this.viewPortRect().centerX(),
-		// 		y: this.viewPortRect().centerY()
-		// 	}
-		// ));
+		let rect = transformedRect(this.transformedContentRect(), new Transform(
+			scaleBy,
+			0,
+			0, {
+				x: this.viewPortRect().centerX(),
+				y: this.viewPortRect().centerY()
+			}
+		));
 
-		let rect = this.transformedContentRect();
-		let viewPort = this.viewPortRect();
+		let viewPort = this.scaledContentRect();
 
-		console.log(viewPort);
-
-		let rectLeft = rect.left;// / this.state.scale;
-		let rectTop = rect.top;// / this.state.scale;
-		let br = this.props.bounds.right * this.state.scale;
-		let bl = this.props.bounds.left * this.state.scale;
-		let bb = this.props.bounds.bottom * this.state.scale;
-		let bt = this.props.bounds.top * this.state.scale;
-
-		if (rectLeft <= br) {
-
-			translateX = br - rectLeft;
-		} else if (rectLeft >= bl) {
-
-			translateX = bl - rectLeft;
-		}
-
-		if (rectTop >= bt) {
-
-			translateY = bt - rectTop;
-		} else if (rectTop <= bb) {
-
-			translateY = bb - rectTop;
-		}
-
-		console.log(rect, this.state.scale);
+		let visibleViewPortRect = this.visibleViewPortRect();
 
 		rect = transformedRect(rect, new Transform(1, translateX, translateY));
+		rect = bounceBackRect(rect, viewPort, visibleViewPortRect);
 
-		console.log(rect);
-		// console.log(this.viewPortRect());
-
-		// console.log(this.transformedContentRect());
-
-		// console.log(alignedRect(rect, this.viewPortRect()));
 		// rect = alignedRect(rect, this.viewPortRect());
 		this.animate(rect);
 	}
