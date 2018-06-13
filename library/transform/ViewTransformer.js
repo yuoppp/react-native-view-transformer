@@ -34,11 +34,14 @@ export default class ViewTransformer extends React.Component {
 
 	constructor(props) {
 		super(props);
+
+		let { translateX, translateY, scale } = this.props.initialTransform;
+
 		this.state = {
 			//transform state
-			scale: 1,
-			translateX: 0,
-			translateY: 0,
+			scale: scale,
+			translateX: translateX,
+			translateY: translateY,
 
 			//animation state
 			animator: new Animated.Value(0),
@@ -383,9 +386,6 @@ export default class ViewTransformer extends React.Component {
 			}
 		));
 
-		// rect = transformedRect(rect, new Transform(1, this.viewPortRect().centerX() - pivotX, this.viewPortRect().centerY() - pivotY));
-		// rect = alignedRect(rect, this.viewPortRect());
-
 		let viewPort = this.scaledContentRect();
 		let visibleViewPortRect = this.visibleViewPortRect();
 
@@ -523,9 +523,14 @@ ViewTransformer.propTypes = {
 	 */
 	maxOverScrollDistance: PropTypes.number,
 
+	viewPortWidth: PropTypes.number,
+	viewPortHeight: PropTypes.number,
+
 	maxScale: PropTypes.number,
 	minScale: PropTypes.number,
 	allowOverscale: PropTypes.bool,
+
+	initialTransform: PropTypes.object,
 
 	contentAspectRatio: PropTypes.number,
 
@@ -550,4 +555,9 @@ ViewTransformer.defaultProps = {
 	minScale: 0.8,
 	allowOverscale: true,
 	enableResistance: false,
+	initialTransform: {
+		translateX: 0,
+		translateY: 0,
+		scale: 1
+	}
 };
